@@ -1,0 +1,131 @@
+
+# ==================================================
+# Q-GUARD — Git Ignore
+# ==================================================
+/qguard_dashboard_bundle/
+/backend/storage/
+/public/demo/
+/node_modules/
+/dist/
+
+__pycache__/
+*.pyc
+*.parquet
+*.pt
+*.pth
+*.npy
+*.npz
+*.zip
+*.sqlite3
+*.db
+.env
+.env.*
+!.env.example
+
+# Node / React / Vite
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+*.tsbuildinfo
+*.local
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+.eggs/
+
+# Python environments
+.venv/
+venv/
+env/
+.conda/
+
+# Private environment variables
+.env
+.env.*
+!.env.example
+
+# Q-Guard HPC bundle
+# Keep model artifacts locally, not in GitHub.
+/qguard_dashboard_bundle/
+
+# Runtime storage
+# SQLite, uploaded CSVs, model results
+/backend/storage/
+
+# Generated local test CSVs
+/backend/examples/*.csv
+
+# Large machine-learning artifacts
+*.parquet
+*.arrow
+*.feather
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.joblib
+*.pkl
+*.h5
+
+# Archives and dataset exports
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# Generated public demo snapshot
+/public/demo/
+
+# Local SQLite files anywhere in repository
+*.sqlite
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend coverage and test attachments
+playwright-report/
+test-results/
+.vitest-attachments/
+**/__screenshots__/
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+
+# Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+.cache/
+tmp/
+temp/
