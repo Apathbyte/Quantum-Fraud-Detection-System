@@ -22,6 +22,7 @@ import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedDataIntakeRouteImport } from './routes/_authenticated/data-intake'
 import { Route as AuthenticatedHistoricalContextRouteImport } from './routes/_authenticated/historical-context'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
@@ -103,6 +104,11 @@ const errors503Route = errors503RouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDataIntakeRoute = AuthenticatedDataIntakeRouteImport.update({
+  id: '/data-intake',
+  path: '/data-intake',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedHistoricalContextRoute =
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/data-intake': typeof AuthenticatedDataIntakeRoute
   '/historical-context': typeof AuthenticatedHistoricalContextRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -246,6 +253,7 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/data-intake': typeof AuthenticatedDataIntakeRoute
   '/historical-context': typeof AuthenticatedHistoricalContextRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -280,6 +288,7 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_authenticated/data-intake': typeof AuthenticatedDataIntakeRoute
   '/_authenticated/historical-context': typeof AuthenticatedHistoricalContextRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -313,6 +322,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/data-intake'
     | '/historical-context'
     | '/errors/$error'
     | '/settings/account'
@@ -341,6 +351,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/data-intake'
     | '/historical-context'
     | '/'
     | '/errors/$error'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_authenticated/data-intake'
     | '/_authenticated/historical-context'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
@@ -498,6 +510,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/data-intake': {
+      id: '/_authenticated/data-intake'
+      path: '/data-intake'
+      fullPath: '/data-intake'
+      preLoaderRoute: typeof AuthenticatedDataIntakeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/historical-context': {
@@ -654,6 +673,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
+  AuthenticatedDataIntakeRoute: typeof AuthenticatedDataIntakeRoute
   AuthenticatedHistoricalContextRoute: typeof AuthenticatedHistoricalContextRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -666,6 +686,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
+  AuthenticatedDataIntakeRoute: AuthenticatedDataIntakeRoute,
   AuthenticatedHistoricalContextRoute: AuthenticatedHistoricalContextRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

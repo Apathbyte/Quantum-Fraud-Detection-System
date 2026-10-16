@@ -1,7 +1,26 @@
 
-"""Q-Guard operational model inference."""
+"""
+Q-Guard operational inference.
+
+Models:
+    - Fraud V3 (LightGBM)
+    - AML Context V2 (LightGBM)
+    - Protection Context V2 (LightGBM)
+
+Input:
+    Prepared account-feature CSV (63 columns).
+
+Missing numerical values:
+    - Preserved as NaN for the trained LightGBM models.
+    - Replaced with zero only during derived ratio calculation,
+      matching the original training feature engineering.
+
+Unsupported non-numeric text, unknown categorical values,
+and infinite numeric values are rejected.
+"""
 
 import json
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -10,7 +29,12 @@ import numpy as np
 import pandas as pd
 
 
+# ============================================================
+# PATHS
+# ============================================================
+
 ROOT = Path(__file__).resolve().parents[2]
+
 BUNDLE = ROOT / "qguard_dashboard_bundle"
 
 MODEL_FILES = {
@@ -25,33 +49,70 @@ MODEL_FILES = {
     ),
 }
 
-# Same derived features as the original training pipeline.
+
+# ============================================================
+# FEATURE ENGINEERING
+# ============================================================
+
 RATIOS = {
-    "wager_growth_ratio": ("wager_last30", "wager_first30"),
-    "deposit_growth_ratio": ("deposit_last30", "deposit_first30"),
-    "wager_share_recent": ("wager_last30", "wager_total"),
-    "deposit_share_recent": ("deposit_last30", "deposit_total"),
-    "withdraw_to_deposit": ("withdrawal_total", "deposit_total"),
-    "wager_to_deposit": ("wager_total", "deposit_total"),
-    "avg_wager_growth": ("avg_wager_last30", "avg_wager_first30"),
-    "away_session_share": ("away_region_sessions", "session_count"),
-    "deposit_per_session": ("deposit_count", "session_count"),
+    "wager_growth_ratio": (
+        "wager_last30",
+        "wager_first30",
+    ),
+    "deposit_growth_ratio": (
+        "deposit_last30",
+        "deposit_first30",
+    ),
+    "wager_share_recent": (
+        "wager_last30",
+        "wager_total",
+    ),
+    "deposit_share_recent": (
+        "deposit_last30",
+        "deposit_total",
+    ),
+    "withdraw_to_deposit": (
+        "withdrawal_total",
+        "deposit_total",
+    ),
+    "wager_to_deposit": (
+        "wager_total",
+        "deposit_total",
+    ),
+    "avg_wager_growth": (
+        "avg_wager_last30",
+        "avg_wager_first30",
+    ),
+    "away_session_share": (
+        "away_region_sessions",
+        "session_count",
+    ),
+    "deposit_per_session": (
+        "deposit_count",
+        "session_count",
+    ),
 }
 
-CATEGORICAL = ("home_region", "income_band")
+CATEGORICAL = (
+    "home_region",
+    "income_band",
+)
 
 
 class InputSchemaError(ValueError):
-    pass
+    """Incompatible model input data."""
 
+
+# ============================================================
+# LOAD SAVED MODELS
+# ============================================================
 
 @lru_cache(maxsize=1)
 def load_models() -> dict[str, lgb.Booster]:
-    """Load and cache the three operational models."""
-
     models = {}
 
     for name, path in MODEL_FILES.items():
+
         if not path.is_file():
             raise FileNotFoundError(
                 f"Missing {name} model: {path}"
@@ -61,41 +122,39 @@ def load_models() -> dict[str, lgb.Booster]:
             model_file=str(path)
         )
 
-    schemas = [
-        model.feature_name()
-        for model in models.values()
-    ]
+    reference = models["fraud"]
 
-    if not all(
-        schema == schemas[0]
-        for schema in schemas[1:]
-    ):
-        raise RuntimeError(
-            "Operational model feature schemas do not match"
-        )
+    # Validate identical feature schemas.
+    for name, model in models.items():
 
-    vocabularies = [
-        model.pandas_categorical
-        for model in models.values()
-    ]
+        if (
+            model.feature_name()
+            != reference.feature_name()
+        ):
+            raise RuntimeError(
+                f"Model feature schema mismatch: {name}"
+            )
 
-    if not all(
-        vocabulary == vocabularies[0]
-        for vocabulary in vocabularies[1:]
-    ):
-        raise RuntimeError(
-            "Operational model categorical encodings do not match"
-        )
+        if (
+            model.pandas_categorical
+            != reference.pandas_categorical
+        ):
+            raise RuntimeError(
+                f"Categorical vocabulary mismatch: {name}"
+            )
 
     return models
 
 
-def required_csv_columns() -> list[str]:
-    models = load_models()
+# ============================================================
+# REQUIRED INPUT COLUMNS
+# ============================================================
 
-    features = next(
-        iter(models.values())
-    ).feature_name()
+def required_csv_columns() -> list[str]:
+
+    features = (
+        load_models()["fraud"].feature_name()
+    )
 
     return ["account_id"] + [
         name
@@ -104,35 +163,39 @@ def required_csv_columns() -> list[str]:
     ]
 
 
+# ============================================================
+# OPERATIONAL INFERENCE
+# ============================================================
+
 def predict_prepared_frame(
     frame: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Execute operational inference on prepared account features.
-
-    Input: one row per account, with required source features.
-    Output: three scores and corresponding alert indicators.
-
-    Raw transaction preprocessing is not performed here.
-    """
 
     models = load_models()
 
-    expected = next(
-        iter(models.values())
-    ).feature_name()
+    reference = models["fraud"]
 
-    missing = [
-        col
-        for col in required_csv_columns()
-        if col not in frame.columns
+    expected = reference.feature_name()
+
+    # --------------------------------------------------------
+    # Validate required columns
+    # --------------------------------------------------------
+
+    missing_columns = [
+        name
+        for name in required_csv_columns()
+        if name not in frame.columns
     ]
 
-    if missing:
+    if missing_columns:
         raise InputSchemaError(
             "Missing required columns: "
-            + ", ".join(missing[:12])
-            + (" ..." if len(missing) > 12 else "")
+            + ", ".join(missing_columns[:12])
+            + (
+                " ..."
+                if len(missing_columns) > 12
+                else ""
+            )
         )
 
     if frame.empty:
@@ -140,38 +203,58 @@ def predict_prepared_frame(
             "Dataset contains no account rows"
         )
 
-    ids = (
+    # --------------------------------------------------------
+    # Validate account IDs
+    # --------------------------------------------------------
+
+    identifiers = (
         frame["account_id"]
         .astype("string")
         .str.strip()
     )
 
     if (
-        ids.isna().any()
-        or (ids == "").any()
-        or ids.duplicated().any()
+        identifiers.isna().any()
+        or identifiers.eq("").any()
+        or identifiers.duplicated().any()
     ):
         raise InputSchemaError(
-            "Account identifiers must be non-empty and unique"
+            "Account identifiers must be "
+            "non-empty and unique"
         )
 
-    features = pd.DataFrame(index=frame.index)
+    # --------------------------------------------------------
+    # Validate saved categorical vocabularies
+    # --------------------------------------------------------
 
-    vocabularies = next(
-        iter(models.values())
-    ).pandas_categorical
+    categorical_levels = (
+        reference.pandas_categorical
+    )
 
-    if not vocabularies or len(vocabularies) != 2:
-        raise RuntimeError(
-            "Expected two saved categorical vocabularies"
-        )
-
-    # Preserve the categories used during model training.
-    for category, levels in zip(
-        CATEGORICAL, vocabularies
+    if (
+        not categorical_levels
+        or len(categorical_levels) != len(CATEGORICAL)
     ):
+        raise RuntimeError(
+            "Saved categorical encodings "
+            "are missing or incomplete"
+        )
+
+    features = pd.DataFrame(
+        index=frame.index
+    )
+
+    # --------------------------------------------------------
+    # Categorical features
+    # --------------------------------------------------------
+
+    for name, levels in zip(
+        CATEGORICAL,
+        categorical_levels,
+    ):
+
         values = (
-            frame[category]
+            frame[name]
             .astype("string")
             .str.strip()
         )
@@ -181,65 +264,144 @@ def predict_prepared_frame(
             & ~values.isin(levels)
         )
 
-        if values.isna().any() or unknown.any():
+        if (
+            values.isna().any()
+            or unknown.any()
+        ):
             raise InputSchemaError(
-                f"{category} contains missing or unknown values"
+                f"{name} contains missing "
+                "or unknown categories"
             )
 
-        features[category] = pd.Categorical(
+        features[name] = pd.Categorical(
             values,
             categories=levels,
         )
 
-    # Validate original numerical features.
-    for column in expected:
-        if column in CATEGORICAL or column in RATIOS:
+    # --------------------------------------------------------
+    # Numerical features
+    # --------------------------------------------------------
+
+    for name in expected:
+
+        if (
+            name in CATEGORICAL
+            or name in RATIOS
+        ):
             continue
 
-        numeric = pd.to_numeric(
-            frame[column],
-            errors="coerce",
-        ).astype("float32")
+        raw = frame[name]
 
-        if not np.isfinite(
-            numeric.to_numpy()
-        ).all():
-            raise InputSchemaError(
-                f"Invalid numerical values in {column}"
+        values = pd.to_numeric(
+            raw,
+            errors="coerce",
+        )
+
+        # Reject unexpected text rather than silently
+        # converting it into missing data.
+        invalid = (
+            raw.notna()
+            & values.isna()
+        )
+
+        if invalid.any():
+
+            affected = (
+                identifiers.loc[invalid]
+                .head(3)
+                .tolist()
             )
 
-        features[column] = numeric
+            raise InputSchemaError(
+                f"Non-numeric text in {name} "
+                f"(accounts: {', '.join(affected)})"
+            )
 
-    # Recalculate training-time ratio features.
+        numeric = values.astype(
+            "float32"
+        )
+
+        # NaN is allowed because LightGBM supports
+        # missing numerical values natively.
+        #
+        # Infinity is NOT allowed.
+        if np.isinf(
+            numeric.to_numpy()
+        ).any():
+            raise InputSchemaError(
+                f"Infinite or overflowing values in {name}"
+            )
+
+        features[name] = numeric
+
+    # --------------------------------------------------------
+    # Nine derived ratio features
+    # --------------------------------------------------------
+
     for name, (
         numerator,
         denominator,
     ) in RATIOS.items():
 
-        features[name] = (
+        # Match the original training pipeline:
+        # fill missing numerator/denominator values
+        # with zero FOR THIS CALCULATION ONLY.
+        #
+        # Original numerical columns retain NaN.
+
+        top = (
             features[numerator]
-            / (features[denominator] + np.float32(1.0))
-        ).astype("float32")
+            .fillna(0)
+            .to_numpy(dtype=np.float32)
+        )
+
+        bottom = (
+            features[denominator]
+            .fillna(0)
+            .to_numpy(dtype=np.float32)
+        )
+
+        ratio = (
+            top
+            / (bottom + np.float32(1.0))
+        )
 
         if not np.isfinite(
-            features[name].to_numpy()
+            ratio
         ).all():
             raise InputSchemaError(
                 f"Invalid derived ratio: {name}"
             )
 
-    # Match the exact saved model feature order.
+        features[name] = ratio.astype(
+            "float32"
+        )
+
+    # Restore exact trained feature order.
     features = features[expected]
 
+    # --------------------------------------------------------
+    # Load alert thresholds
+    # --------------------------------------------------------
+
+    manifest_path = (
+        BUNDLE / "dashboard_manifest.json"
+    )
+
     manifest = json.loads(
-        (BUNDLE / "dashboard_manifest.json")
-        .read_text(encoding="utf-8")
+        manifest_path.read_text(
+            encoding="utf-8"
+        )
     )
 
     thresholds = manifest["thresholds"]
 
+    # --------------------------------------------------------
+    # Run real LightGBM inference
+    # --------------------------------------------------------
+
     output = pd.DataFrame({
-        "account_id": ids.to_numpy(),
+        "account_id": identifiers.to_numpy(),
     })
 
     for name, model in models.items():
@@ -250,12 +412,12 @@ def predict_prepared_frame(
                 validate_features=True,
                 num_threads=4,
             ),
-            dtype="float64",
+            dtype=np.float64,
         )
 
         if (
             scores.ndim != 1
-            or len(scores) != len(frame)
+            or scores.size != len(frame)
             or not np.isfinite(scores).all()
         ):
             raise RuntimeError(
@@ -263,9 +425,11 @@ def predict_prepared_frame(
             )
 
         output[f"{name}_score"] = scores
+
         output[f"{name}_alert"] = (
-            scores >= float(thresholds[name])
+            scores >= float(
+                thresholds[name]
+            )
         )
 
     return output
-
